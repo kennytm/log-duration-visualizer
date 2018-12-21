@@ -1,0 +1,64 @@
+[timestamp]
+pattern = '^\[([0-9]{2}:[0-9]{2}:[0-9]{2})\]'
+format = '%H:%M:%S'
+
+[[durations]]
+pattern = '\[TIMING\] .*? -- (?P<s>[0-9]+\.[0-9]+)'
+
+[[durations]]
+pattern = '\[RUSTC-TIMING\] .*? (?P<s>[0-9]+\.[0-9]+)'
+
+[[colors]]
+pattern = '\[TIMING\] Std '
+color = '#901'
+group = 0
+
+[[colors]]
+pattern = '\[TIMING\] Rustc '
+color = '#392'
+group = 0
+
+[[colors]]
+pattern = '\[TIMING\] Llvm '
+color = '#873'
+group = 0
+
+[[colors]]
+pattern = '\[TIMING\] CodegenBackend '
+color = '#15b'
+group = 0
+
+[[colors]]
+pattern = '\[TIMING\] ToolBuild '
+color = '#0aa'
+group = 0
+
+[[colors]]
+pattern = '\[TIMING\] Rustdoc '
+color = '#c49'
+group = 0
+
+[[colors]]
+pattern = '\[TIMING\] (?:Rustc)?Docs '
+color = '#e83'
+group = 0
+
+[[colors]]
+pattern = '\[TIMING\] Crate '
+color = '#9f2'
+group = 0
+
+[[colors]]
+pattern = '\[TIMING\] Compiletest '
+color = '#396'
+group = 0
+
+[[colors]]
+pattern = '\[TIMING\]'
+color = '#888'
+group = 0
+
+[[colors]]
+pattern = '\[RUSTC-TIMING\]'
+color = 'linear-gradient(to bottom, #cc0, #dd0)'
+group = 1

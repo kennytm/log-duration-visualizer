@@ -1,0 +1,18 @@
+[package]
+name = "log-duration-visualizer"
+version = "0.1.0"
+authors = ["kennytm <kennytm@gmail.com>"]
+edition = "2018"
+license = "MIT"
+description = "Parse log file and visualize time taken of various steps"
+repository = "https://github.com/kennytm/log-duration-visualizer"
+
+[dependencies]
+serde = "1.0"
+serde_derive = "1.0"
+toml = "0.4"
+regex = "1.1"
+structopt = { version = "0.2", default-features = false }
+chrono = { version = "0.4", default-features = false }
+lazy_static = "1.2"
+askama_escape = "0.1"
