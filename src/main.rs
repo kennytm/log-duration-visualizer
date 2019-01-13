@@ -82,6 +82,10 @@ fn parse_duration(captures: &Captures) -> Option<Duration> {
     Some(Duration::nanoseconds(nanoseconds.round() as i64))
 }
 
+fn as_percent(num: i64, denom: i64) -> f64 {
+    num as f64 * 100.0 / denom as f64
+}
+
 fn run() -> Result<(), Box<dyn error::Error>> {
     let args = Args::from_args();
     let config_bytes = fs::read(args.config)?;
@@ -134,6 +138,8 @@ fn run() -> Result<(), Box<dyn error::Error>> {
 
     intervals.sort_unstable_by_key(|a| (a.start, Reverse(a.end)));
     let global_start_time = intervals[0].start;
+    let global_end_time = intervals.last().unwrap().end;
+    let global_duration = (global_end_time - global_start_time).num_seconds();
 
     let mut lanes = config
         .colors
@@ -198,13 +204,13 @@ fn run() -> Result<(), Box<dyn error::Error>> {
     }
 
     println!(
-        "{}",
         r##"        </style>
                 </head>
                 <body>
                     <p><label for="zoom">Zoom out: </label><input id="zoom" type="range" min="1" max="100" value="1"></p>
-                    <div id="lanes">
-        "##
+                    <div id="lanes" style="height:{}px">
+        "##,
+        global_duration,
     );
 
     for interval in &intervals {
@@ -213,14 +219,14 @@ fn run() -> Result<(), Box<dyn error::Error>> {
         let color_config = &config.colors[interval.color];
         println!(
             r##"<div class="block c{}" title="{} ~ {}
-{}" style="top:{}px;height:{}px;left:{}em;"></div>
+{}" style="top:{}%;height:{}%;left:{}em;"></div>
             "##,
             interval.color,
             interval.start,
             interval.end,
             askama_escape::escape(unsafe { str::from_utf8_unchecked(&interval.message) }),
-            top,
-            height,
+            as_percent(top, global_duration),
+            as_percent(height, global_duration),
             interval.lane + lanes[&color_config.group].0,
         )
     }
@@ -232,8 +238,9 @@ fn run() -> Result<(), Box<dyn error::Error>> {
                 <script>
                     var zoom = document.getElementById('zoom');
                     var lanes = document.getElementById('lanes');
+                    var lanesHeight = lanes.clientHeight;
                     zoom.oninput = function(e) {
-                        lanes.style.transform = 'scaleY(' + (1/zoom.value) + ')';
+                        lanes.style.height = (lanesHeight/zoom.value) + 'px';
                     };
                 </script>
             </body>
