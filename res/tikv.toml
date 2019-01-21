@@ -1,0 +1,71 @@
+[timestamp]
+pattern = '^([0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3})'
+format = '%Y/%m/%d %H:%M:%S%.3f'
+
+[[durations]]
+pattern = 'takes (?P<s>[0-9]+(?:\.[0-9]+)?)s'
+
+[[colors]]
+pattern = 'scan snapshot'
+color = '#9e1'
+group = 0
+
+[[colors]]
+pattern = '\[slow-query\]'
+color = '#510'
+group = 0
+
+[[colors]]
+pattern = 'Split Check Task'
+color = '#6e9'
+group = 0
+
+[[colors]]
+pattern = 'compact files in range \[None, None\) to level Some\(1\)'
+color = '#380'
+group = 0
+
+[[colors]]
+pattern = 'compact files in range \[None, None\) to level None'
+color = '#c95'
+group = 0
+
+[[colors]]
+pattern = 'Snap apply'
+color = '#cbc'
+group = 0
+
+[[colors]]
+pattern = 'ready [0-9]+ committed entries'
+color = '#a70'
+group = 0
+
+[[colors]]
+pattern = 'async applys'
+color = '#eb8'
+group = 0
+
+[[colors]]
+pattern = 'timeout CompactCheck'
+color = '#f74'
+group = 0
+
+[[colors]]
+pattern = 'apply new data'
+color = '#b2f'
+group = 0
+
+[[colors]]
+pattern = 'CheckAndCompact'
+color = '#1c3'
+group = 0
+
+[[colors]]
+pattern = 'pending peers'
+color = '#150'
+group = 0
+
+[[colors]]
+pattern = 'regions raft ready'
+color = '#3a2'
+group = 0

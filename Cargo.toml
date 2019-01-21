@@ -15,4 +15,3 @@ regex = "1.1"
 structopt = { version = "0.2", default-features = false }
 chrono = { version = "0.4", default-features = false }
 lazy_static = "1.2"
-askama_escape = "0.1"

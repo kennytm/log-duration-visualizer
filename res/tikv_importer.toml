@@ -1,0 +1,31 @@
+[timestamp]
+pattern = '^([0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3})'
+format = '%Y/%m/%d %H:%M:%S%.3f'
+
+[[durations]]
+pattern = 'takes (?P<s>[0-9]+(?:\.[0-9]+)?)s'
+
+[[colors]]
+pattern = '\[ImportJob '
+color = '#339'
+group = 0
+
+[[colors]]
+pattern = '\[PrepareJob '
+color = '#c00'
+group = 1
+
+[[colors]]
+pattern = '\[SubImportJob '
+color = '#0c0'
+group = 1
+
+[[colors]]
+pattern = '\[ImportSSTJob '
+color = '#090'
+group = 2
+
+[[colors]]
+pattern = '\[PrepareRangeJob '
+color = '#900'
+group = 2

@@ -7,9 +7,10 @@ use std::{
     collections::BTreeMap,
     error,
     fs::{self, File},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, stdout, Write},
     path::PathBuf,
     process, str,
+    borrow::Cow,
 };
 use structopt::StructOpt;
 
@@ -82,9 +83,23 @@ fn parse_duration(captures: &Captures) -> Option<Duration> {
     Some(Duration::nanoseconds(nanoseconds.round() as i64))
 }
 
-fn as_percent(num: i64, denom: i64) -> f64 {
-    num as f64 * 100.0 / denom as f64
+fn escape_js(s: &str) -> Cow<'_, str> {
+    lazy_static::lazy_static! {
+        static ref PATTERN: regex::Regex = regex::Regex::new("['\\\\\r\n]").unwrap();
+    }
+    PATTERN.replace_all(s, |c: &regex::Captures| {
+        match c.get(0).unwrap().as_str() {
+            r"'" => r"\'",
+            r"\" => r"\\",
+            "\r" => r"\r",
+            "\n" => r"\n",
+            _ => unreachable!(),
+        }
+    })
 }
+
+const LANE_WIDTH: usize = 20;
+const MIN_GLOBAL_WIDTH: usize = 400;
 
 fn run() -> Result<(), Box<dyn error::Error>> {
     let args = Args::from_args();
@@ -97,6 +112,10 @@ fn run() -> Result<(), Box<dyn error::Error>> {
     let cutoff = Duration::seconds(1);
 
     let log_file = BufReader::new(File::open(args.log)?);
+
+    let mut global_start_time = chrono::naive::MAX_DATE.and_hms_nano(23, 59, 59, 999_999_999);
+    let mut global_end_time = chrono::naive::MIN_DATE.and_hms(0, 0, 0);
+
     for line in log_file.split(b'\n') {
         let line = line?;
         if let Some(dur_captures) = config
@@ -124,6 +143,12 @@ fn run() -> Result<(), Box<dyn error::Error>> {
                             format!("no color specified for {}", String::from_utf8_lossy(&line))
                         })?;
                     let start_ts = end_ts - dur;
+                    if start_ts < global_start_time {
+                        global_start_time = start_ts;
+                    }
+                    if end_ts > global_end_time {
+                        global_end_time = end_ts;
+                    }
                     intervals.push(Interval {
                         start: start_ts,
                         end: end_ts,
@@ -136,10 +161,11 @@ fn run() -> Result<(), Box<dyn error::Error>> {
         }
     }
 
-    intervals.sort_unstable_by_key(|a| (a.start, Reverse(a.end)));
-    let global_start_time = intervals[0].start;
-    let global_end_time = intervals.last().unwrap().end;
+    let global_start_time = global_start_time;
+    let global_end_time = global_end_time;
     let global_duration = (global_end_time - global_start_time).num_seconds();
+
+    intervals.sort_unstable_by_key(|a| (a.start, Reverse(a.end)));
 
     let mut lanes = config
         .colors
@@ -169,84 +195,188 @@ fn run() -> Result<(), Box<dyn error::Error>> {
         total_lanes += lanes.len();
     }
 
-    println!(
-        "{}",
+    let stdout = stdout();
+    let mut lock = stdout.lock();
+
+    writeln!(
+        lock,
         r##"<!DOCTYPE html>
             <html>
                 <head>
                     <meta charset="utf8">
                     <title>Execution timeline</title>
                     <style>
-                        #lanes {
-                            position: relative;
-                        }
-                        .block {
+                        canvas {{
                             position: absolute;
-                            width: 0.9em;
-                            box-sizing: border-box;
-                            border-radius: 0.1em;
-                        }
-                        .block:hover {
-                            border: 1px solid black;
-                        }
-        "##
-    );
-
-    for (i, color_config) in config.colors.iter().enumerate() {
-        println!(
-            r##"
-                .c{} {{
-                    background: {};
-                }}
-            "##,
-            i, color_config.color,
-        );
-    }
-
-    println!(
-        r##"        </style>
+                            left: 0.5em;
+                            top: 0.5em;
+                        }}
+                        #aux {{
+                            position: fixed;
+                            right: 0.5em;
+                            top: 0.5em;
+                            width: 30em;
+                            font-family: sans-serif;
+                            font-size: 0.75em;
+                        }}
+                    </style>
                 </head>
                 <body>
-                    <p><label for="zoom">Zoom out: </label><input id="zoom" type="range" min="1" max="100" value="1"></p>
-                    <div id="lanes" style="height:{}px">
+                    <canvas id="lanes" width="{0}" height="{1}"></canvas>
+                    <canvas id="hover" width="{0}" height="{1}"></canvas>
+                    <div id="aux">
+                        <p>
+                            <label for="zoom"><strong>Zoom out:</strong></label>
+                            <input id="zoom" type="range" min="1" max="100" value="1">
+                            (<output for="zoom" id="zoom-val">1</output>×)
+                        </p>
+                        <p><strong>Start time:</strong> <span id="start-time"></span></p>
+                        <p><strong>End time:</strong> <span id="end-time"></span></p>
+                        <p><strong>Message:</strong><br/><span id="msg"></span></p>
+                    </div>
+                    <script>
+                        var zoom = document.getElementById('zoom');
+                        var globalWidth = {0};
+                        var globalHeight = {1};
+                        var laneWidth = {2};
+                        var colors = [
         "##,
+        MIN_GLOBAL_WIDTH.max(total_lanes * LANE_WIDTH),
         global_duration,
-    );
+        LANE_WIDTH,
+    )?;
+
+    for color_config in &config.colors {
+        writeln!(lock, "'{}',", escape_js(&color_config.color))?;
+    }
+
+    writeln!(
+        lock,
+        r##"
+                        ];
+                        var blocks = [
+        "##,
+    )?;
 
     for interval in &intervals {
         let top = (interval.start - global_start_time).num_seconds();
         let height = (interval.end - interval.start).num_seconds();
         let color_config = &config.colors[interval.color];
-        println!(
-            r##"<div class="block c{}" title="{} ~ {}
-{}" style="top:{}%;height:{}%;left:{}em;"></div>
-            "##,
+        writeln!(
+            lock,
+            "{{color: {}, start: '{}', end: '{}', msg: '{}', top: {}, height: {}, lane: {}}},",
             interval.color,
             interval.start,
             interval.end,
-            askama_escape::escape(unsafe { str::from_utf8_unchecked(&interval.message) }),
-            as_percent(top, global_duration),
-            as_percent(height, global_duration),
+            escape_js(&String::from_utf8_lossy(&interval.message)),
+            top,
+            height,
             interval.lane + lanes[&color_config.group].0,
-        )
+        )?;
     }
 
-    println!(
+    writeln!(
+        lock,
         "{}",
         r##"
-                </div>
-                <script>
-                    var zoom = document.getElementById('zoom');
-                    var lanes = document.getElementById('lanes');
-                    var lanesHeight = lanes.clientHeight;
-                    zoom.oninput = function(e) {
-                        lanes.style.height = (lanesHeight/zoom.value) + 'px';
-                    };
-                </script>
-            </body>
-        </html>
-        "##
-    );
+                        ];
+                        function render(z) {
+                            var ctx = document.getElementById('lanes').getContext('2d');
+                            ctx.clearRect(0, 0, globalWidth, globalHeight);
+
+                            ctx.lineWidth = 1;
+                            ctx.font = 'sans-serif';
+                            ctx.textBaseline = 'top';
+                            ctx.textAlign = 'right';
+                            ctx.fillStyle = '#999';
+                            for (var i = 0; i < globalHeight; i += 300) {
+                                var notHour = i % 3600;
+                                var x = notHour ? 0.85 : 0.75;
+                                var y = Math.round(i * z) + 0.5;
+                                ctx.strokeStyle = notHour ? '#999' : '#333';
+                                ctx.beginPath();
+                                ctx.moveTo(globalWidth*x, y);
+                                ctx.lineTo(globalWidth, y);
+                                ctx.stroke();
+                                ctx.fillText((i/60|0) + 'm', globalWidth, y);
+                            }
+
+                            for (var i = 0, block; block = blocks[i]; ++ i) {
+                                ctx.fillStyle = colors[block.color];
+                                ctx.fillRect(
+                                    block.lane * laneWidth,
+                                    block.top * z,
+                                    laneWidth - 1,
+                                    block.height * z,
+                                );
+                            }
+                        }
+                        document.addEventListener('DOMContentLoaded', function() {
+                            render(1);
+                        });
+                        zoom.addEventListener('input', function() {
+                            document.getElementById('zoom-val').value = zoom.value;
+                            render(1/zoom.value);
+                        });
+
+                        document.getElementById('hover').addEventListener('mousemove', function(e) {
+                            var rect = this.getBoundingClientRect();
+                            var z = 1/zoom.value;
+                            var xx = e.clientX - rect.left;
+                            var yy = e.clientY - rect.top;
+                            var x = xx / laneWidth;
+                            var y = yy / z;
+                            yy = Math.round(yy) + 0.5;
+
+                            // FIXME: Consider switching to a spatial data structure to speed up searching
+                            // Ref: https://stackoverflow.com/questions/7727758/find-overlapping-rectangles-algorithm
+                            var i = 0, block;
+                            for (; block = blocks[i]; ++ i) {
+                                if (
+                                    block.top <= y && y <= block.top + block.height &&
+                                    block.lane <= x && x <= block.lane + 1
+                                ) {
+                                    break;
+                                }
+                            }
+                            if (i >= blocks.length) {
+                                i = -1;
+                            }
+
+                            var ctx = this.getContext('2d');
+                            ctx.clearRect(0, 0, globalWidth, globalHeight);
+
+                            ctx.strokeStyle = 'rgba(255,0,0,0.5)';
+                            ctx.lineWidth = 1;
+                            ctx.font = 'sans-serif';
+                            ctx.textBaseline = 'top';
+                            ctx.textAlign = 'left';
+                            ctx.fillStyle = '#f88';
+                            ctx.beginPath();
+                            ctx.moveTo(0, yy);
+                            ctx.lineTo(globalWidth, yy);
+                            ctx.stroke();
+                            ctx.fillText((y/60|0) + 'm' + (y%60|0) + 's', globalWidth * 0.85, yy);
+
+                            if (i !== -1) {
+                                var block = blocks[i];
+                                ctx.strokeStyle = '#000';
+                                ctx.strokeRect(
+                                    block.lane * laneWidth,
+                                    block.top * z,
+                                    laneWidth - 1,
+                                    block.height * z,
+                                );
+                                document.getElementById('start-time').innerText = block.start;
+                                document.getElementById('end-time').innerText = block.end;
+                                document.getElementById('msg').innerText = block.msg;
+                            }
+                        });
+                    </script>
+                </body>
+            </html>
+        "##,
+    )?;
 
     Ok(())
 }

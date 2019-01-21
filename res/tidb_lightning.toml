@@ -31,8 +31,13 @@ color = '#fa7'
 group = 1
 
 [[colors]]
-pattern = 'compact level 1'
+pattern = 'compact level -?1'
 color = '#30b'
+group = 1
+
+[[colors]]
+pattern = 'switch to tikv'
+color = '#9f2'
 group = 1
 
 [[colors]]

@@ -60,5 +60,5 @@ group = 0
 
 [[colors]]
 pattern = '\[RUSTC-TIMING\]'
-color = 'linear-gradient(to bottom, #cc0, #dd0)'
+color = '#cd0'
 group = 1
